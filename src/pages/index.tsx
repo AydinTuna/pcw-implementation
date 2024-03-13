@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   createSmartAccountClient,
   BiconomySmartAccountV2,
@@ -10,6 +10,8 @@ import { CHAIN_NAMESPACES } from "@web3auth/base";
 import { contractABI } from "../contract/contractABI";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { Transaction } from "@biconomy/account";
+
 
 export default function Home() {
   const [smartAccount, setSmartAccount] =
@@ -17,7 +19,8 @@ export default function Home() {
   const [smartAccountAddress, setSmartAccountAddress] = useState<string | null>(
     null
   );
-  const [count, setCount] = useState<string | null>(null);
+  const [txAdd1, setTxAdd1] = useState<string>("");
+  const [txAdd2, setTxAdd2] = useState<string>("");
   const [txnHash, setTxnHash] = useState<string | null>(null);
   const [chainSelected, setChainSelected] = useState<number>(0);
 
@@ -93,72 +96,26 @@ export default function Home() {
     }
   };
 
-  const getCountId = async () => {
-    console.log(chains[chainSelected]);
+  const sendBatchTx = async () => {
 
-    const contractAddress = chains[chainSelected].incrementCountContractAdd;
-    const provider = new ethers.providers.JsonRpcProvider(
-      chains[chainSelected].providerUrl
-    );
-    const contractInstance = new ethers.Contract(
-      contractAddress,
-      contractABI,
-      provider
-    );
-    console.log("Contract Instance:", contractInstance);
+    const txs: Transaction[] = [{ to: txAdd1, data: "0x123" }, { to: txAdd2, data: "0x234" }]
+    if (smartAccount) {
+      try {
+        const userOpResponse = await smartAccount.sendTransaction(txs, { paymasterServiceData: { mode: PaymasterMode.SPONSORED }, });
+        const { transactionHash } = await userOpResponse.waitForTxHash();
+        console.log("Transaction Hash", transactionHash);
+        const userOpReceipt = await userOpResponse.wait();
+        if (userOpReceipt.success == 'true') {
+          console.log("UserOp receipt", userOpReceipt)
+          console.log("Transaction receipt", userOpReceipt.receipt)
+        }
+      } catch (error) {
+        console.log(error);
 
-    const countId = await contractInstance.getCount();
-    setCount(countId.toString());
-  };
-
-  const incrementCount = async () => {
-    try {
-      const toastId = toast("Populating Transaction", { autoClose: false });
-
-      const contractAddress = chains[chainSelected].incrementCountContractAdd;
-      const provider = new ethers.providers.JsonRpcProvider(
-        chains[chainSelected].providerUrl
-      );
-      const contractInstance = new ethers.Contract(
-        contractAddress,
-        contractABI,
-        provider
-      );
-      const minTx = await contractInstance.populateTransaction.increment();
-      console.log("Mint Tx Data", minTx.data);
-      const tx1 = {
-        to: contractAddress,
-        data: minTx.data,
-      };
-
-      toast.update(toastId, {
-        render: "Sending Transaction",
-        autoClose: false,
-      });
-      //@ts-ignore
-      const userOpResponse = await smartAccount?.sendTransaction(tx1, {
-        paymasterServiceData: { mode: PaymasterMode.SPONSORED },
-      });
-      console.log("userOpResponse:", userOpResponse);
-
-      //@ts-ignore
-      const { transactionHash } = await userOpResponse.waitForTxHash();
-      console.log("Transaction Hash", transactionHash);
-
-      if (transactionHash) {
-        toast.update(toastId, {
-          render: "Transaction Successful",
-          type: "success",
-          autoClose: 5000,
-        });
-        setTxnHash(transactionHash);
-        await getCountId();
       }
-    } catch (error) {
-      console.log(error);
-      toast.error("Transaction Unsuccessful", { autoClose: 5000 });
+
     }
-  };
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-start gap-8 p-24">
@@ -194,22 +151,18 @@ export default function Home() {
           <span>Smart Account Address</span>
           <span>{smartAccountAddress}</span>
           <span>Network: {chains[chainSelected].name}</span>
-          <div className="flex flex-row justify-between items-start gap-8">
-            <div className="flex flex-col justify-center items-center gap-4">
+
+
+          <div className="flex flex-col justify-center items-center gap-4">
+
+            <div className="flex flex-col justify-center items-center">
+              <input type="text" name="txAdd1" id="txAdd1" onChange={(e) => setTxAdd1(e.target.value)} className="mb-4 rounded-md bg-slate-300 p-2 text-black" />
+              <input type="text" name="txAdd2" id="txAdd2" onChange={(e) => setTxAdd2(e.target.value)} className="mb-4 rounded-md bg-slate-300 p-2 text-black" />
               <button
                 className="w-[10rem] h-[3rem] bg-orange-300 text-black font-bold rounded-lg"
-                onClick={getCountId}
+                onClick={() => sendBatchTx()}
               >
-                Get Count Id
-              </button>
-              <span>{count}</span>
-            </div>
-            <div className="flex flex-col justify-center items-center gap-4">
-              <button
-                className="w-[10rem] h-[3rem] bg-orange-300 text-black font-bold rounded-lg"
-                onClick={incrementCount}
-              >
-                Increment Count
+                Send Batch Tx
               </button>
               {txnHash && (
                 <a
@@ -223,7 +176,6 @@ export default function Home() {
               )}
             </div>
           </div>
-          <span className="text-white">Open console to view console logs.</span>
         </>
       )}
     </main>
